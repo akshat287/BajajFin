@@ -1,64 +1,55 @@
-package com.bajajfinserv;
+package com.example.bajajfinserv;
 
-import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.http.*;
+import org.springframework.context.annotation.Bean;
 import org.springframework.web.client.RestTemplate;
-
-import java.util.HashMap;
-import java.util.Map;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @SpringBootApplication
-public class Application implements CommandLineRunner {
+public class BajajFinservHealthQualifierApp {
 
     public static void main(String[] args) {
-        SpringApplication.run(Application.class, args);
+        SpringApplication.run(BajajFinservHealthQualifierApp.class, args);
     }
 
-    @Override
-    public void run(String... args) throws Exception {
-        // Step 1: Send POST request to generate webhook
-        String url = "https://bfhldevapigw.healthrx.co.in/hiring/generateWebhook/JAVA";
-        Map<String, String> requestBody = new HashMap<>();
-        requestBody.put("name", "John Doe");
-        requestBody.put("regNo", "REG12347");
-        requestBody.put("email", "john@example.com");
+    @Bean
+    public RestTemplate restTemplate() {
+        return new RestTemplate();
+    }
 
-        RestTemplate restTemplate = new RestTemplate();
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        HttpEntity<Map<String, String>> entity = new HttpEntity<>(requestBody, headers);
-        ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.POST, entity, Map.class);
-
-        String webhookUrl = (String) response.getBody().get("webhook");
-        String accessToken = (String) response.getBody().get("accessToken");
-
-        System.out.println("Received Webhook URL: " + webhookUrl);
-        System.out.println("Received Access Token: " + accessToken);
-
-        // Step 2: Get question based on regNo (odd or even regNo)
-        String question;
-        if (Integer.parseInt("12347".substring(7)) % 2 == 0) {
-            question = "Question 2";
-        } else {
-            question = "Question 1";
-        }
-
-        // Example SQL solution (just as an example, modify per actual question)
-        String finalQuery = "SELECT * FROM students WHERE age > 18";
-
-        // Step 3: Send final SQL query to the webhook
-        HttpHeaders finalHeaders = new HttpHeaders();
-        finalHeaders.setContentType(MediaType.APPLICATION_JSON);
-        finalHeaders.set("Authorization", "Bearer " + accessToken);
-
-        Map<String, String> queryBody = new HashMap<>();
-        queryBody.put("finalQuery", finalQuery);
-
-        HttpEntity<Map<String, String>> finalEntity = new HttpEntity<>(queryBody, finalHeaders);
-        ResponseEntity<String> finalResponse = restTemplate.exchange(webhookUrl, HttpMethod.POST, finalEntity, String.class);
-
-        System.out.println("Final Response: " + finalResponse.getBody());
+    @Bean
+    public CommandLineRunner commandLineRunner(RestTemplate restTemplate) {
+        return args -> {
+            String url = "https://bfhldevapigw.healthrx.co.in/hiring/generateWebhook/JAVA";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            String body = "{\"name\":\"John Doe\",\"regNo\":\"REG12347\",\"email\":\"john@example.com\"}";
+            HttpEntity<String> request = new HttpEntity<>(body, headers);
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, request, String.class);
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode json = mapper.readTree(response.getBody());
+            String webhook = json.get("webhook").asText();
+            String token = json.get("accessToken").asText();
+            String regNo = "REG12347";
+            String lastTwo = regNo.substring(regNo.length() - 2);
+            int num = Integer.parseInt(lastTwo);
+            String query = "SELECT p.AMOUNT AS SALARY, CONCAT(e.FIRST_NAME, ' ', e.LAST_NAME) AS NAME, FLOOR(DATEDIFF('2025-05-11', e.DOB) / 365.25) AS AGE, d.DEPARTMENT_NAME FROM PAYMENTS p JOIN EMPLOYEE e ON p.EMP_ID = e.EMP_ID JOIN DEPARTMENT d ON e.DEPARTMENT = d.DEPARTMENT_ID WHERE DAY(p.PAYMENT_TIME) != 1 AND p.AMOUNT = (SELECT MAX(p2.AMOUNT) FROM PAYMENTS p2 WHERE DAY(p2.PAYMENT_TIME) != 1)";
+            String submitUrl = "https://bfhldevapigw.healthrx.co.in/hiring/testWebhook/JAVA";
+            HttpHeaders submitHeaders = new HttpHeaders();
+            submitHeaders.setContentType(MediaType.APPLICATION_JSON);
+            submitHeaders.set("Authorization", "Bearer " + token);
+            String submitBody = "{\"finalQuery\":\"" + query.replace("\"", "\\\"") + "\"}";
+            HttpEntity<String> submitRequest = new HttpEntity<>(submitBody, submitHeaders);
+            restTemplate.exchange(submitUrl, HttpMethod.POST, submitRequest, String.class);
+            System.out.println("Done!");
+        };
     }
 }
